@@ -2,7 +2,8 @@ require('dotenv').config();
 const { SigningStargateClient, GasPrice, coins } = require("@cosmjs/stargate");
 const { DirectSecp256k1Wallet } = require('@cosmjs/proto-signing');
 const { readFileSync } = require("fs");
-const {base64FromBytes} = require("cosmjs-types/helpers");
+const { base64FromBytes } = require("cosmjs-types/helpers");
+const { toInjectiveAddress } = require('./injective');
 
 async function performTransaction(walletInfo, numberOfTimes) {
     const denom = process.env.TOKEN_DENOM;
@@ -26,12 +27,13 @@ async function performTransaction(walletInfo, numberOfTimes) {
     while (successCount < numberOfTimes) {
         try {
             const [account] = await wallet.getAccounts();
+            const walletAddress = process.env.CHAIN_SYMBOL == 'inj' ? toInjectiveAddress(walletInfo.privateKey) : account.address; // injective特殊地址
             const amount = coins(1, denom); // 自转1,按需修改
             const memo = `data:,{"op":"mint","amt":${mintAmount},"tick":"${tick}","p":"${protocol}"}`; // 这里可能会变化
-            console.log(`memo = ${memo}`);
+            console.log(`${walletAddress} memo = ${memo}`);
 
-            const result = await client.sendTokens(account.address, account.address, amount, fee, base64FromBytes(Buffer.from(memo, 'utf8')));
-            console.log(`${account.address}, 第 ${successCount + 1} 次操作成功: ${`https://www.mintscan.io/${chain}/tx/` + result.transactionHash}`);
+            const result = await client.sendTokens(walletAddress, walletAddress, amount, fee, base64FromBytes(Buffer.from(memo, 'utf8')));
+            console.log(`${walletAddress}, 第 ${successCount + 1} 次操作成功: ${`https://www.mintscan.io/${chain}/tx/` + result.transactionHash}`);
             successCount++;
         } catch (error) {
             console.error(`尝试次数 ${attemptCount + 1} 失败: `, error);
@@ -59,7 +61,7 @@ async function main() {
     const privateKey = process.env.PRIVATE_KEY;
     const wallet = await DirectSecp256k1Wallet.fromKey(Buffer.from(privateKey, "hex"), chain);
     const [account] = await wallet.getAccounts();
-    const walletAddress = account.address;
+    const walletAddress = process.env.CHAIN_SYMBOL == 'inj' ? toInjectiveAddress(privateKey) : account.address; // injective特殊地址
 
     const client = await SigningStargateClient.connectWithSigner(process.env.NODE_URL, wallet);
     const balance = await client.getBalance(walletAddress, denom);
